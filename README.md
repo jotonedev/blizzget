@@ -1,0 +1,2 @@
+# blizzget
+Blizzard CDN downloader
