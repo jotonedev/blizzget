@@ -1,6 +1,6 @@
 # blizzget
 
-[Download](releases)
+[Download](https://github.com/d07RiV/blizzget/releases)
 
 Blizzard CDN downloader. Capable of downloading upcoming versions of games. They will most likely not be playable, but can be used for datamining and such. Note that it always stores the CASC archive in the /Data folder, which is not correct for every game - you might want to rename the folder to what the actual game uses. Currently I only tested it for Diablo III.
 
