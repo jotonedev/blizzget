@@ -101,7 +101,8 @@ void ProgramData::loadBuilds() {
       File file = data_->ngdp_->load(cdn_hash);
       if (!file) return -1;
       data_->cdn_config = NGDP::ParseConfig(file);
-      data_->builds = split(data_->cdn_config["builds"]);
+      //data_->builds = split(data_->cdn_config["builds"]);
+      data_->builds.push_back(data_->ngdp_->version()->build);
       notify(0);
       for (size_t i = 0; i < data_->builds.size() && !terminate_; ++i) {
         std::string build = data_->builds[i];
@@ -118,7 +119,30 @@ void ProgramData::loadBuilds() {
   };
 
   builds_loaded.clear();
+  build_configs.clear();
   setTask(new BuildTask);
+}
+
+void ProgramData::loadBuild(std::string const& build) {
+  class BuildTask : public Task {
+  public:
+    BuildTask(std::string const& build)
+      : build_(build)
+    {}
+  private:
+    std::string build_;
+    uint32 run() {
+      File file = data_->ngdp_->load(build_);
+      if (file) {
+        data_->build_configs[build_] = NGDP::ParseConfig(file);
+      } else {
+        data_->build_configs[build_] = {};
+      }
+      return 1;
+    }
+  };
+
+  setTask(new BuildTask(build));
 }
 
 /////////////////////////////////////
@@ -182,18 +206,41 @@ void ProgramData::loadTags() {
       file = loadData(NGDP::to_string(enc->keys[0]), 1);
       if (!file || terminate_) return -1;
       file = NGDP::DecodeBLTE(file, enc->usize);
+      //File("download2.bin", File::REWRITE).copy(file);
 
       // parse download file
       if (file.read16(true) != 'DL') return -1;
-      file.seek(3, SEEK_CUR);
+      uint8 version = file.read8();
+      uint8 hash_size_ekey = file.read8();
+      uint8 has_checksum_in_entry = file.read8();
       uint32 numEntries = file.read32(true);
       uint16 numTags = file.read16(true);
+      uint32 entryExtra = 6;
+      if (has_checksum_in_entry) {
+        entryExtra += 4;
+      }
+      if (version >= 2) {
+        uint8 number_of_flag_bytes = file.read8();
+        entryExtra += number_of_flag_bytes;
+        if (version >= 3) {
+          file.seek(4, SEEK_CUR);
+        }
+      }
       data_->file_sizes_.clear();
+      json::Value jsv;
+      uint32 tsize = 0;
       for (uint32 i = 0; i < numEntries; ++i) {
         file.read(hash, sizeof hash);
-        file.seek(10, SEEK_CUR);
+        //File ff = loadData(hash);
+        file.seek(entryExtra, SEEK_CUR);
         auto const* layout = data_->encoding_->getLayout(hash);
         data_->file_sizes_.push_back(layout ? layout->csize : 0);
+
+        //json::Value vv;
+        //vv["hash"] = NGDP::to_string(hash);
+        //vv["size"] = layout ? layout->csize : 0;
+        //jsv["files"].append(vv);
+        tsize += (layout ? layout->csize : 0);
       }
       data_->tags_ = ProgramData::loadTags(file, numTags, numEntries);
       std::sort(data_->tags_.begin(), data_->tags_.end(), [](Tag const& lhs, Tag const& rhs) {
@@ -205,8 +252,19 @@ void ProgramData::loadTags() {
           tags.emplace_back();
         }
         tags.back().push_back(data_->tags_[i].name);
+
+        //std::string tkey = fmtstring("tags%u", (uint32) data_->tags_[i].type);
+        //auto& mask = data_->tags_[i].mask;
+        //for (uint32 j = 0; j < numEntries; ++j) {
+        //  if (mask[j / 8] & (1 << (7 - (j & 7)))) {
+        //    jsv["files"][j][tkey].append(data_->tags_[i].name);
+        //  }
+        //}
       }
       data_->tags = tags;
+
+      jsv["size"] = tsize;
+      json::write(File(path::root() / "download.json", File::REWRITE), jsv);
       return 0;
     }
   };
@@ -215,15 +273,15 @@ void ProgramData::loadTags() {
   setTask(new TagTask);
 }
 
-std::vector<uint8> ProgramData::downloadMask() {
-  size_t maskSize = (file_sizes_.size() + 7) / 8;
+std::vector<uint8> ProgramData::downloadMask(size_t numFiles) {
+  size_t maskSize = (numFiles + 7) / 8;
   std::vector<uint8> mask(maskSize, 0);
   for (std::string const& tags : used_tags) {
     std::vector<uint8> cur_mask(maskSize, 0xFF);
     for (std::string const& tag : split(tags)) {
       for (size_t i = 0; i < tags_.size(); ++i) {
         if (tags_[i].name == tag) {
-          for (size_t j = 0; j < maskSize; ++j) {
+          for (size_t j = 0; j < maskSize && j < tags_[i].mask.size(); ++j) {
             cur_mask[j] &= tags_[i].mask[j];
           }
           break;
@@ -237,7 +295,7 @@ std::vector<uint8> ProgramData::downloadMask() {
   return mask;
 }
 uint64 ProgramData::downloadSize() {
-  auto mask = downloadMask();
+  auto mask = downloadMask(file_sizes_.size());
   uint64 size = 0;
   for (size_t i = 0; i < file_sizes_.size(); ++i) {
     if (mask[i / 8] & (1 << (7 - (i & 7)))) {
@@ -281,41 +339,43 @@ void ProgramData::download(std::string const& path) {
 
         // write .build.info
 
-        File info(path_ / ".build.info", File::REWRITE);
-        info.printf("Branch!STRING:0|Active!DEC:1|Build Key!HEX:16|CDN Key!HEX:16");
-        info.printf("|Install Key!HEX:16|IM Size!DEC:4|CDN Path!STRING:0");
-        info.printf("|CDN Hosts!STRING:0|Tags!STRING:0|Armadillo!STRING:0");
-        info.printf("|Last Activated!STRING:0|Version!STRING:0|Keyring!HEX:16|KeyService!STRING:0\n");
+        {
+          File info(path_ / ".build.info", File::REWRITE);
+          info.printf("Branch!STRING:0|Active!DEC:1|Build Key!HEX:16|CDN Key!HEX:16");
+          info.printf("|Install Key!HEX:16|IM Size!DEC:4|CDN Path!STRING:0");
+          info.printf("|CDN Hosts!STRING:0|Tags!STRING:0|Armadillo!STRING:0");
+          info.printf("|Last Activated!STRING:0|Version!STRING:0|Keyring!HEX:16|KeyService!STRING:0\n");
 
-        NGDP::from_string(hash, buildConfig["install"]);
-        auto const* enc = encoding->getEncoding(hash);
-        auto const* cdnData = ngdp->cdn();
-        info.printf("%s|1|%s|%s", ngdp->region().c_str(), data_->selected_build.c_str(), ngdp->version()->cdn.c_str());
-        info.printf("|%s|%u|%s", NGDP::to_string(enc->keys[0]).c_str(), enc->usize, cdnData ? cdnData->path.c_str() : "");
-        info.printf("|%s|%s|", cdnData ? join(cdnData->hosts, " ").c_str() : "", join(data_->used_tags, ":").c_str());
+          NGDP::from_string(hash, buildConfig["install"]);
+          auto const* enc = encoding->getEncoding(hash);
+          auto const* cdnData = ngdp->cdn();
+          info.printf("%s|1|%s|%s", ngdp->region().c_str(), data_->selected_build.c_str(), ngdp->version()->cdn.c_str());
+          info.printf("|%s|%u|%s", NGDP::to_string(enc->keys[0]).c_str(), enc->usize, cdnData ? cdnData->path.c_str() : "");
+          info.printf("|%s|%s|", cdnData ? join(cdnData->hosts, " ").c_str() : "", join(data_->used_tags, ":").c_str());
 
-        __time64_t curtime;
-        tm timestruct;
-        char timebuf[128];
-        _time64(&curtime);
-        _gmtime64_s(&timestruct, &curtime);
-        strftime(timebuf, sizeof timebuf, "%Y-%m-%dT%H:%M:%SZ", &timestruct);
-        std::vector<std::string> version;
-        std::string build_id;
-        for (auto const& p : split_multiple(buildConfig["build-name"], "_- ")) {
-          if (!p.empty() && std::isdigit((unsigned char) p[0])) {
-            std::string d;
-            for (size_t i = 0; i < p.size() && std::isdigit((unsigned char)p[i]); ++i) {
-              d.push_back(p[i]);
-            }
-            if (d.size() >= 4) {
-              build_id = d;
-            } else {
-              version.push_back(d);
+          __time64_t curtime;
+          tm timestruct;
+          char timebuf[128];
+          _time64(&curtime);
+          _gmtime64_s(&timestruct, &curtime);
+          strftime(timebuf, sizeof timebuf, "%Y-%m-%dT%H:%M:%SZ", &timestruct);
+          std::vector<std::string> version;
+          std::string build_id;
+          for (auto const& p : split_multiple(buildConfig["build-name"], "_- ")) {
+            if (!p.empty() && std::isdigit((unsigned char)p[0])) {
+              std::string d;
+              for (size_t i = 0; i < p.size() && std::isdigit((unsigned char)p[i]); ++i) {
+                d.push_back(p[i]);
+              }
+              if (d.size() >= 4) {
+                build_id = d;
+              } else {
+                version.push_back(d);
+              }
             }
           }
+          info.printf("|%s|%s||\n", timebuf, (join(version, ".") + "." + build_id).c_str());
         }
-        info.printf("|%s|%s||\n", timebuf, (join(version, ".") + "." + build_id).c_str());
 
         // load indices
 
@@ -326,19 +386,32 @@ void ProgramData::download(std::string const& path) {
         // fetch download file
 
         NGDP::from_string(hash, buildConfig["download"]);
-        enc = encoding->getEncoding(hash);
+        auto const* enc = encoding->getEncoding(hash);
         File download = NGDP::DecodeBLTE(data.addFile(enc->keys[0], loadData(enc->keys[0])));
         if (download.read16(true) != 'DL') {
           throw Exception("invalid download file");
         }
         if (terminate_) return 1;
-        download.seek(3, SEEK_CUR);
+        uint8 version = download.read8();
+        uint8 hash_size_ekey = download.read8();
+        uint8 has_checksum_in_entry = download.read8();
         uint32 numEntries = download.read32(true);
-        uint32 numTags = download.read16(true);
+        uint16 numTags = download.read16(true);
+        uint32 entryExtra = 6;
+        if (has_checksum_in_entry) {
+          entryExtra += 4;
+        }
+        if (version >= 2) {
+          uint8 number_of_flag_bytes = download.read8();
+          entryExtra += number_of_flag_bytes;
+          if (version >= 3) {
+            download.seek(4, SEEK_CUR);
+          }
+        }
         uint32 filesPos = download.tell();
-        download.seek(26 * numEntries, SEEK_CUR);
+        download.seek((16 + entryExtra) * numEntries, SEEK_CUR);
         data_->tags_ = ProgramData::loadTags(download, numTags, numEntries);
-        auto mask = data_->downloadMask();
+        auto mask = data_->downloadMask(numEntries);
 
         // calculate size
 
@@ -347,7 +420,7 @@ void ProgramData::download(std::string const& path) {
         download.seek(filesPos, SEEK_SET);
         for (uint32 i = 0; i < numEntries; ++i) {
           download.read(hash, sizeof hash);
-          download.seek(10, SEEK_CUR);
+          download.seek(entryExtra, SEEK_CUR);
           if (!(mask[i / 8] & (1 << (7 - (i & 7))))) continue;
           ++progress->filesTotal;
           auto const* layout = encoding->getLayout(hash);
@@ -361,7 +434,7 @@ void ProgramData::download(std::string const& path) {
         download.seek(filesPos, SEEK_SET);
         for (uint32 i = 0; i < numEntries && !terminate_; ++i) {
           download.read(hash, sizeof hash);
-          download.seek(10, SEEK_CUR);
+          download.seek(entryExtra, SEEK_CUR);
           if (!(mask[i / 8] & (1 << (7 - (i & 7))))) continue;
 
           File file = loadFile(hash);
@@ -397,7 +470,7 @@ void ProgramData::download(std::string const& path) {
         numTags = install.read16(true);
         numEntries = install.read32(true);
         data_->tags_ = ProgramData::loadTags(install, numTags, numEntries);
-        mask = data_->downloadMask();
+        mask = data_->downloadMask(numEntries);
 
         progress->filesTotal = 0;
         progress->filesDone = 0;

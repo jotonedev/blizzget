@@ -36,15 +36,18 @@ void TagsPage::addTags(int index, std::string str) {
     tags_->addItem(str);
     data.used_tags.push_back(str);
   } else {
-    if (index) str.push_back(' ');
+    //if (index) str.push_back(' ');
     int sel = options_[index]->getCurSel();
     if (sel >= 0) sel = options_[index]->getItemData(sel);
     if (sel < 0) {
-      for (auto const& tag : data.tags[index]) {
-        addTags(index + 1, str + tag);
-      }
+      //for (auto const& tag : data.tags[index]) {
+      //  addTags(index + 1, str + tag);
+      //}
+      addTags(index + 1, str);
     } else {
-      addTags(index + 1, str + data.tags[index][sel]);
+      std::string next = str;
+      if (!str.empty()) next.push_back(' ');
+      addTags(index + 1, next + data.tags[index][sel]);
     }
   }
 }
@@ -94,7 +97,7 @@ LRESULT TagsPage::onMessage(uint32 message, WPARAM wParam, LPARAM lParam) {
         int maxWidth = std::max<int>(60, FontSys::getTextSize(FontSys::getSysFont(), "Any").cx);
         ComboFrame* box = new ComboFrame(this);
         options_.push_back(box);
-        if (tags.size() > 1) {
+        if (tags.size() > 0) {
           box->addString("Any", -1);
         }
         for (size_t i = 0; i < tags.size(); ++i) {

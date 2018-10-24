@@ -11,7 +11,7 @@ enum {
 BuildPage::BuildPage(Wizard* wizard)
   : Page(wizard)
 {
-  build_ = new ComboFrame(this, ID_BUILD);
+  build_ = new ComboFrame(this, ID_BUILD, CBS_DROPDOWN);
   build_->addString("Loading CDN config...", -1);
   build_->setCurSel(0);
   build_->setPoint(PT_TOPLEFT, 120, 0);
@@ -35,11 +35,11 @@ void BuildPage::init() {
   if (ngdp && ngdp->version() && ngdp->version()->cdn == data.builds_loaded && data.builds.size() == data.build_configs.size()) {
     build_->reset();
     for (std::string const& build : data.builds) {
-      std::string name = data.build_configs[build]["build-name"];
-      if (build == ngdp->version()->build) {
-        name += " (current)";
-      }
-      build_->addString(name);
+      //std::string name = data.build_configs[build]["build-name"];
+      //if (build == ngdp->version()->build) {
+      //  name += " (current)";
+      //}
+      build_->addString(build);
       if (build == data.selected_build) {
         build_->setCurSel(build_->getCount() - 1);
       }
@@ -51,54 +51,73 @@ void BuildPage::init() {
   }
 }
 
+void BuildPage::showInfo(std::string const& build) {
+  auto& data = wizard_->app()->data();
+  static const std::string skipTags = "download|encoding|encoding-size|install|patch|patch-config|root";
+  std::string text;
+  auto const& info = data.build_configs[build];
+  for (auto& kv : info) {
+    if (skipTags.find(kv.first) != std::string::npos) continue;
+    text.append(kv.first);
+    text.append(" = ");
+    text.append(kv.second);
+    text.append("\r\n");
+  }
+  tags_->setText(text);
+  tags_->show();
+  wizard_->enableNext(info.size() > 0);
+}
+
 LRESULT BuildPage::onMessage(uint32 message, WPARAM wParam, LPARAM lParam) {
   auto& data = wizard_->app()->data();
   switch (message) {
   case WM_COMMAND:
-    if (LOWORD(wParam) == ID_BUILD && HIWORD(wParam) == CBN_SELCHANGE) {
-      int index = build_->getCurSel();
-      if (index >= 0 && index < data.builds.size() && data.build_configs.count(data.builds[index])) {
-        static const std::string skipTags = "download|encoding|encoding-size|install|patch|patch-config|root";
-        std::string text;
-        auto const& build = data.build_configs[data.builds[index]];
-        data.selected_build = data.builds[index];
-        for (auto& kv : build) {
-          if (skipTags.find(kv.first) != std::string::npos) continue;
-          text.append(kv.first);
-          text.append(" = ");
-          text.append(kv.second);
-          text.append("\r\n");
+    if (LOWORD(wParam) == ID_BUILD && (HIWORD(wParam) == CBN_EDITCHANGE || HIWORD(wParam) == CBN_SELCHANGE)) {
+      std::string build = build_->getText();
+      if (HIWORD(wParam) == CBN_SELCHANGE) {
+        int id = build_->getCurSel();
+        if (id >= 0 && id < data.builds.size()) {
+          build = data.builds[id];
         }
-        tags_->setText(text);
-        tags_->show();
-        wizard_->enableNext(true);
-      } else {
+      }
+      if (build.size() != 32) {
         data.selected_build.clear();
         tags_->hide();
         wizard_->enableNext(false);
+      } else if (data.build_configs.count(build)) {
+        data.selected_build = build;
+        showInfo(build);
+      } else {
+        data.selected_build = build;
+        tags_->hide();
+        wizard_->enableNext(false);
+        data.loadBuild(build);
       }
     }
     return 0;
   case WM_TASKDONE:
     if (lParam == -1) {
       build_->reset();
-      build_->addString("Failed to load CDN config", -1);
-      build_->setCurSel(0);
-      build_->disable();
+      //build_->addString("Failed to load CDN config", -1);
+      //build_->setCurSel(0);
+      //build_->disable();
     } else if (lParam == 0) {
       build_->reset();
       for (std::string const& build : data.builds) {
-        build_->addString("Loading...", -1);
+        build_->addString(build, -1);
       }
       build_->enable();
     } else if (lParam != ProgramData::LOADING) {
-      build_->delString(lParam - 1);
+      if (data.build_configs.count(data.selected_build)) {
+        showInfo(data.selected_build);
+      }
+      /*build_->delString(lParam - 1);
       std::string build = data.builds[lParam - 1];
       std::string name = data.build_configs[build]["build-name"];
       if (build == data.ngdp()->version()->build) {
         name += " (current)";
       }
-      SendMessage(build_->getHandle(), CB_INSERTSTRING, lParam - 1, (LPARAM) name.c_str());
+      SendMessage(build_->getHandle(), CB_INSERTSTRING, lParam - 1, (LPARAM) name.c_str());*/
     }
     return 0;
   default:

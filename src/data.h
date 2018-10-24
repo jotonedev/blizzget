@@ -34,6 +34,7 @@ private:
 
 public:
   void loadBuilds();
+  void loadBuild(std::string const& build);
   NGDP::ConfigFile cdn_config;
   std::vector<std::string> builds;
   std::map<std::string, NGDP::ConfigFile> build_configs;
@@ -60,7 +61,7 @@ private:
   std::vector<Tag> tags_;
 
   static std::vector<Tag> loadTags(File& file, uint32 numTags, uint32 numEntries);
-  std::vector<uint8> downloadMask();
+  std::vector<uint8> downloadMask(size_t numFiles);
 
   // step 4
 

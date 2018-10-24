@@ -54,7 +54,6 @@ HFONT FontSys::_getFont(int height, std::string const& face, int flags) {
   fs.size = height;
   fs.flags = flags;
   fs.face = face;
-
   auto pos = std::lower_bound(fonts.begin() + 1, fonts.end(), fs);
   if (pos != fonts.end() && *pos == fs) {
     return pos->font;

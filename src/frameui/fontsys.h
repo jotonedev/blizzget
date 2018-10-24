@@ -1,15 +1,14 @@
 #pragma once
 
 #include <windows.h>
-#include <string>
-#include <vector>
-#include <map>
-#include "base/types.h"
+#include "base/common.h"
 
-#define FONT_BOLD       0x0001
-#define FONT_ITALIC     0x0002
-#define FONT_UNDERLINE  0x0004
-#define FONT_STRIKEOUT  0x0008
+enum {
+  FONT_BOLD = 0x0001,
+  FONT_ITALIC = 0x0002,
+  FONT_UNDERLINE = 0x0004,
+  FONT_STRIKEOUT = 0x0008,
+};
 
 class FontSys {
   struct FontStruct {
@@ -26,6 +25,17 @@ class FontSys {
       , flags(fs.flags)
     {
       fs.font = nullptr;
+    }
+    FontStruct& operator=(FontStruct&& fs) {
+      if (&fs != this) {
+        if (font) DeleteObject(font);
+        font = fs.font;
+        face = std::move(fs.face);
+        size = fs.size;
+        flags = fs.flags;
+        fs.font = nullptr;
+      }
+      return *this;
     }
     FontStruct(FontStruct const& fs) = delete;
     ~FontStruct() {

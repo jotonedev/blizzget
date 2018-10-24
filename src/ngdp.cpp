@@ -6,31 +6,40 @@
 
 namespace NGDP {
 
-  const std::string HOST = "http://cn.patch.battle.net:1119";
+  const std::string HOST = "http://us.patch.battle.net:1119";
 
   const std::map<std::string, std::string> ProgramCodes = {
-    {"agent", "Battle.net Agent"},
-    {"bna", "Battle.net App"},
-    {"bnt", "Heroes of the Storm Alpha (Deprecated)"},
-    {"d3", "Diablo 3 Retail"},
-    {"d3cn", "Diablo 3 China"},
-    {"d3t", "Diablo 3 Test"},
-    {"demo", "Demo (Partial)"},
-    {"hero", "Heroes of the Storm Retail"},
-    {"herot", "Heroes of the Storm Test"},
-    {"hsb", "Hearthstone"},
-    {"pro", "Overwatch Retail"},
-    {"prodev", "Overwatch Dev"},
-    {"sc2", "StarCraft II (Partial)"},
-    {"s2", "StarCraft II"},
-    {"s2t", "StarCraft II Test (Partial)"},
-    {"s2b", "StarCraft II Beta"},
-    {"test", "Test (Partial)"},
-    {"storm", "Heroes of the Storm (Deprecated)"},
-    {"war3", "Warcraft III (Partial)"},
-    {"wow", "World of Warcraft Retail"},
-    {"wowt", "World of Warcraft Test"},
-    {"wow_beta", "World of Warcraft Beta"},
+    { "agent", "Battle.net Agent" },
+    { "bna", "Battle.net App" },
+    { "bnt", "Heroes of the Storm Alpha (Deprecated)" },
+    { "d3", "Diablo 3 Retail" },
+    { "d3cn", "Diablo 3 China" },
+    { "d3t", "Diablo 3 Test" },
+    { "demo", "Demo (Partial)" },
+    { "dst2a", "Destiny 2 Alpha (Encrypted)" },
+    { "hero", "Heroes of the Storm Retail" },
+    { "herot", "Heroes of the Storm Test" },
+    { "heroc", "Heroes of the Storm Tournament" },
+    { "hsb", "Hearthstone" },
+    { "hst", "Hearthstone Test (Partial)" },
+    { "pro", "Overwatch Retail" },
+    { "prot", "Overwatch Test" },
+    { "proc", "Overwatch Tournament" },
+    { "prodev", "Overwatch Dev (Encrypted)" },
+    { "s1", "StarCraft I" },
+    { "s1a", "StarCraft I Alpha (Encrypted)" },
+    { "s1t", "StarCraft I Test" },
+    { "sc2", "StarCraft II (Deprecated)" },
+    { "s2", "StarCraft II Retail" },
+    { "s2t", "StarCraft II Test (Deprecated)" },
+    { "s2b", "StarCraft II Beta (Deprecated)" },
+    { "test", "Test (Deprecated)" },
+    { "storm", "Heroes of the Storm (Deprecated)" },
+    { "war3", "Warcraft III Old Ver (Partial)" },
+    { "w3", "Warcraft III" },
+    { "wow", "World of Warcraft Retail" },
+    { "wowt", "World of Warcraft Test" },
+    { "wow_beta", "World of Warcraft Beta" },
   };
 
   NGDP::NGDP(std::string const& app)
@@ -41,6 +50,7 @@ namespace NGDP {
       throw Exception("failed to fetch cdns file");
     }
     for (std::string const& line : file) {
+      if (line.substr(0, 2) == "##") continue;
       if (line.find('!') != std::string::npos || line.empty()) continue;
       auto parts = split(line, '|');
       auto& config = cdns_[parts[0]];
@@ -53,13 +63,14 @@ namespace NGDP {
       throw Exception("failed to fetch versions file");
     }
     for (std::string const& line : file) {
+      if (line.substr(0, 2) == "##") continue;
       if (line.find('!') != std::string::npos || line.empty()) continue;
       auto parts = split(line, '|');
       auto& config = versions_[parts[0]];
       config.build = parts[1];
       config.cdn = parts[2];
-      config.id = std::stoi(parts[3]);
-      config.version = parts[4];
+      config.id = std::stoi(parts[4]);
+      config.version = parts[5];
       if (cdns_.count(parts[0])) {
         regions_.push_back(parts[0]);
       }

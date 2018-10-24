@@ -15,5 +15,6 @@ private:
   ComboFrame* build_;
   EditFrame* tags_;
   void init();
+  void showInfo(std::string const& build);
   LRESULT onMessage(uint32 message, WPARAM wParam, LPARAM lParam);
 };
