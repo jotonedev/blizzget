@@ -21,20 +21,8 @@ void _qmemset(uint32* mem, uint32 fill, uint32 count) {
   }
 }
 
-#include "zlib/zlib.h"
-#ifdef _WIN64
-  #ifdef _DEBUG
-    #pragma comment(lib, "zlib/zlib64d.lib")
-  #else
-    #pragma comment(lib, "zlib/zlib64r.lib")
-  #endif
-#else
-  #ifdef _DEBUG
-    #pragma comment(lib, "zlib/zlib32d.lib")
-  #else
-    #pragma comment(lib, "zlib/zlib32r.lib")
-  #endif
-#endif
+#include <zlib.h>
+
 
 uint32 gzdeflate(uint8 const* in, uint32 in_size, uint8* out, uint32* out_size) {
   z_stream z;

@@ -2,6 +2,7 @@
 
 #include <windows.h>
 #include <map>
+#include <string>
 #include "base/types.h"
 
 class Window

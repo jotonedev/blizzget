@@ -23,6 +23,7 @@ namespace NGDP {
     { "hsb", "Hearthstone" },
     { "hst", "Hearthstone Test (Partial)" },
     { "pro", "Overwatch Retail" },
+    { "prob", "Overwatch 2 Test" },
     { "prot", "Overwatch Test" },
     { "proc", "Overwatch Tournament" },
     { "prodev", "Overwatch Dev (Encrypted)" },
